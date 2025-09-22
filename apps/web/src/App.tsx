@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Toaster } from 'sonner';
@@ -16,12 +16,16 @@ import Navbar from './components/Navbar';
 // Utils
 import { getAuthToken, removeAuthToken } from './lib/auth';
 
+/**
+ * Composant principal de l'application SecretHawk
+ * Gère l'authentification et le routage principal
+ */
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState(true);
 
-  useEffect(() => {
-    // Check for existing auth token
+  // Vérification de l'authentification au chargement
+  React.useEffect(() => {
     const token = getAuthToken();
     if (token) {
       setIsAuthenticated(true);
@@ -38,6 +42,7 @@ function App() {
     setIsAuthenticated(false);
   };
 
+  // Écran de chargement
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -50,6 +55,7 @@ function App() {
     );
   }
 
+  // Page de connexion si non authentifié
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -59,6 +65,7 @@ function App() {
     );
   }
 
+  // Application principale avec navigation
   return (
     <Router>
       <div className="min-h-screen bg-gray-50">
@@ -74,6 +81,7 @@ function App() {
           </Routes>
         </main>
 
+        {/* Notifications toast */}
         <Toaster position="top-right" />
       </div>
     </Router>
