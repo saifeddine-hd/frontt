@@ -1,0 +1,91 @@
+# Gitleaks configuration for SecretHawk
+title = "SecretHawk Gitleaks Config"
+
+# Custom rules for enhanced detection
+[[rules]]
+id = "internal-api-key"
+description = "Internal API Key"
+regex = '''INTERNAL-[A-Z0-9]{32}'''
+keywords = ["internal", "api", "key"]
+
+[[rules]]
+id = "custom-secret"
+description = "Custom Secret Pattern"
+regex = '''SECRET-[A-Za-z0-9]{24}'''
+keywords = ["secret"]
+
+[[rules]]
+id = "database-password"
+description = "Database Password in URL"
+regex = '''://[^:]+:([^@]+)@'''
+keywords = ["password", "database"]
+
+# Enhanced AWS detection
+[[rules]]
+id = "aws-access-key-enhanced"
+description = "AWS Access Key ID Enhanced"
+regex = '''\b(AKIA[0-9A-Z]{16})\b'''
+keywords = ["aws", "access", "key"]
+
+[[rules]]
+id = "aws-secret-enhanced"
+description = "AWS Secret Access Key Enhanced"
+regex = '''aws_secret_access_key\s*=\s*['\"]?([A-Za-z0-9/+=]{40})['\"]?'''
+keywords = ["aws", "secret"]
+
+# GitHub tokens
+[[rules]]
+id = "github-token-enhanced"
+description = "GitHub Token Enhanced"
+regex = '''\b(gh[pousr]_[A-Za-z0-9]{36})\b'''
+keywords = ["github", "token"]
+
+# Slack tokens
+[[rules]]
+id = "slack-token-enhanced"
+description = "Slack Token Enhanced"
+regex = '''\b(xox[baprs]-[A-Za-z0-9-]{10,})\b'''
+keywords = ["slack", "token"]
+
+# Generic high-entropy detection
+[[rules]]
+id = "high-entropy-base64"
+description = "High Entropy Base64 String"
+regex = '''\b[A-Za-z0-9+/]{32,}={0,2}\b'''
+entropy = 4.5
+
+# File allowlist
+[allowlist]
+description = "File allowlist"
+files = [
+  ".*test.*",
+  ".*example.*",
+  ".*sample.*",
+  ".*/node_modules/.*",
+  ".*/vendor/.*",
+  ".*/build/.*",
+  ".*/dist/.*"
+]
+
+# Path allowlist
+paths = [
+  ".git/",
+  "node_modules/",
+  "vendor/",
+  "test/",
+  "tests/",
+  "__pycache__/"
+]
+
+# Commit allowlist
+commits = [
+  "allowedcommit1",
+  "allowedcommit2"
+]
+
+# Regex allowlist
+regexes = [
+  "example.*",
+  "test.*",
+  "placeholder.*"
+]

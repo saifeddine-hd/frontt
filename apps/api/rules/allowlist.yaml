@@ -1,0 +1,34 @@
+# Allowlist configuration for SecretHawk
+# Patterns and rules that should be ignored during scanning
+
+files:
+  # Test files and fixtures
+  - ".*test.*"
+  - ".*fixture.*"
+  - ".*mock.*"
+  - ".*example.*"
+  - ".*sample.*"
+  - ".*/node_modules/.*"
+  - ".*/vendor/.*"
+  - ".*/dist/.*"
+  - ".*/build/.*"
+  
+secrets:
+  # Example/placeholder secrets
+  - "^(example|test|demo|placeholder|fake|dummy)"
+  - "^[x]{10,}$"  # All x's
+  - "^[*]{10,}$"  # All asterisks
+  - "^[0]{10,}$"  # All zeros
+  - "^(your|my|our)[-_]?(secret|key|token|password)"
+  
+rules:
+  # Rules to disable for specific contexts
+  - "test_rule"
+  - "example_pattern"
+
+comments:
+  # Allow secrets in comments that are clearly examples
+  - "# Example:"
+  - "// Example:"
+  - "<!-- Example"
+  - "* Example:"

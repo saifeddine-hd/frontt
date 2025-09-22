@@ -1,0 +1,85 @@
+name: SecretHawk Security Scan
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Install Gitleaks
+      run: |
+        wget https://github.com/trufflesecurity/gitleaks/releases/download/v8.18.0/gitleaks_8.18.0_linux_x64.tar.gz
+        tar -xzf gitleaks_8.18.0_linux_x64.tar.gz
+        sudo mv gitleaks /usr/local/bin/
+        chmod +x /usr/local/bin/gitleaks
+    
+    - name: Run Gitleaks scan
+      run: |
+        gitleaks detect \
+          --source . \
+          --report-path gitleaks-report.json \
+          --report-format json \
+          --config scanners/gitleaks.toml \
+          --exit-code 0
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install Python dependencies
+      run: |
+        pip install -r cli/requirements.txt
+    
+    - name: Run SecretHawk CLI scan
+      run: |
+        python cli/secrethawk.py scan . --output secrethawk-results.json
+    
+    - name: Upload scan results
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-scan-results
+        path: |
+          gitleaks-report.json
+          secrethawk-results.json
+    
+    - name: Post results to API (optional)
+      if: env.SECRETHAWK_API_URL && env.SECRETHAWK_API_TOKEN
+      run: |
+        # Optional: Send results to SecretHawk API
+        curl -X POST "${{ env.SECRETHAWK_API_URL }}/api/v1/scans/ci" \
+          -H "Authorization: Bearer ${{ env.SECRETHAWK_API_TOKEN }}" \
+          -H "Content-Type: application/json" \
+          -d @secrethawk-results.json
+    
+    - name: Security scan summary
+      run: |
+        echo "## 🔍 Security Scan Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f secrethawk-results.json ]; then
+          TOTAL=$(jq '.total_findings' secrethawk-results.json)
+          CRITICAL=$(jq '.summary.critical // 0' secrethawk-results.json)
+          HIGH=$(jq '.summary.high // 0' secrethawk-results.json)
+          
+          echo "- **Total Findings**: $TOTAL" >> $GITHUB_STEP_SUMMARY
+          echo "- **Critical**: $CRITICAL" >> $GITHUB_STEP_SUMMARY  
+          echo "- **High**: $HIGH" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$TOTAL" -gt 0 ]; then
+            echo "⚠️ **Security issues found!** Review the artifacts for details." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ **No security issues detected.**" >> $GITHUB_STEP_SUMMARY
+          fi
+        fi
