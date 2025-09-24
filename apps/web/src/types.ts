@@ -3,8 +3,7 @@ export interface ScanJob {
   filename: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
   created_at: Date;
-  completed_at?: Date;
-  findings_count?: number;
+  completed_at?: Date;findings_count?: number | null;
   error?: string;
 }
 

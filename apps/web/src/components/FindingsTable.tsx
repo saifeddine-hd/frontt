@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Eye, EyeOff, ExternalLink } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Eye, EyeOff, ExternalLink, FileText, AlertCircle } from 'lucide-react';
 
 import SeverityBadge from './SeverityBadge';
 import type { Finding } from '../types';
@@ -29,89 +29,125 @@ export default function FindingsTable({
 
   if (findings.length === 0) {
     return (
-      <div className="text-center py-12">
-        <Eye className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No findings</h3>
-        <p className="text-gray-500">No secrets were found in this scan.</p>
-      </div>
+      <motion.div 
+        className="text-center py-16"
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5 }}
+      >
+        <motion.div
+          className="w-20 h-20 bg-gradient-to-br from-green-100 to-emerald-100 rounded-2xl flex items-center justify-center mx-auto mb-6"
+          animate={{ rotate: [0, 5, -5, 0] }}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+        >
+          <Eye className="w-10 h-10 text-green-600" />
+        </motion.div>
+        <h3 className="text-2xl font-bold text-neutral-900 mb-3">All Clear!</h3>
+        <p className="text-neutral-600 text-lg">No secrets were found in this scan. Your code is secure.</p>
+      </motion.div>
     );
   }
 
   return (
     <div>
       {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-gray-50">
+      <div className="overflow-x-auto scrollbar-modern">
+        <table className="table-modern">
+          <thead>
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-4 text-left text-xs font-bold text-neutral-600 uppercase tracking-wider">
+                <div className="flex items-center">
+                  <FileText className="w-4 h-4 mr-2" />
                 File & Line
+                </div>
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-4 text-left text-xs font-bold text-neutral-600 uppercase tracking-wider">
                 Type
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-4 text-left text-xs font-bold text-neutral-600 uppercase tracking-wider">
+                <div className="flex items-center">
+                  <AlertCircle className="w-4 h-4 mr-2" />
                 Severity
+                </div>
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-4 text-left text-xs font-bold text-neutral-600 uppercase tracking-wider">
                 Secret
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-4 text-left text-xs font-bold text-neutral-600 uppercase tracking-wider">
                 Scanner
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody>
             {findings.map((finding, index) => (
               <motion.tr
                 key={`${finding.id || index}`}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className="hover:bg-gray-50"
+                transition={{ delay: index * 0.05, duration: 0.3 }}
+                whileHover={{ scale: 1.01 }}
+                className="group cursor-pointer"
               >
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">
-                    <div className="font-medium truncate max-w-xs" title={finding.file_path}>
-                      {finding.file_path.split('/').pop()}
+                <td className="px-6 py-5">
+                  <div className="flex items-center">
+                    <div className="w-8 h-8 bg-gradient-to-br from-neutral-100 to-neutral-200 rounded-lg flex items-center justify-center mr-3 group-hover:from-primary-100 group-hover:to-primary-200 transition-all duration-200">
+                      <FileText className="w-4 h-4 text-neutral-600 group-hover:text-primary-600" />
                     </div>
-                    <div className="text-gray-500">Line {finding.line_number}</div>
+                    <div>
+                      <div className="font-semibold text-neutral-900 truncate max-w-xs group-hover:text-primary-700 transition-colors" title={finding.file_path}>
+                      {finding.file_path.split('/').pop()}
+                      </div>
+                      <div className="text-neutral-500 text-sm">Line {finding.line_number}</div>
+                    </div>
                   </div>
                 </td>
                 
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm font-medium text-gray-900">
+                <td className="px-6 py-5">
+                  <div className="text-sm font-semibold text-neutral-900">
                     {finding.secret_type.replace(/_/g, ' ').toUpperCase()}
                   </div>
-                  <div className="text-sm text-gray-500">{finding.rule_id}</div>
+                  <div className="text-sm text-neutral-500 font-mono">{finding.rule_id}</div>
                 </td>
                 
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="px-6 py-5">
                   <SeverityBadge severity={finding.severity} />
                 </td>
                 
-                <td className="px-6 py-4">
+                <td className="px-6 py-5">
                   <div className="flex items-center space-x-2">
-                    <code className={`text-sm px-2 py-1 rounded font-mono max-w-xs truncate ${
+                    <motion.code 
+                      className={`text-sm px-3 py-2 rounded-lg font-mono max-w-xs truncate border transition-all duration-200 ${
                       showSecrets 
-                        ? 'bg-red-50 text-red-800 border border-red-200' 
-                        : 'bg-gray-100 text-gray-600'
-                    }`}>
+                        ? 'bg-red-50 text-red-800 border-red-200 shadow-sm' 
+                        : 'bg-neutral-100 text-neutral-700 border-neutral-200'
+                    }`}
+                      whileHover={{ scale: 1.02 }}
+                    >
                       {displaySecret(finding.secret)}
-                    </code>
+                    </motion.code>
                     {showSecrets && (
-                      <div className="text-xs text-orange-600 flex items-center">
+                      <motion.div 
+                        className="text-xs text-orange-600 flex items-center bg-orange-50 px-2 py-1 rounded-full border border-orange-200"
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ delay: 0.1 }}
+                      >
                         <EyeOff className="w-3 h-3 mr-1" />
                         Visible
-                      </div>
+                      </motion.div>
                     )}
                   </div>
                 </td>
                 
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  <span className="capitalize">{finding.scanner || 'regex'}</span>
+                <td className="px-6 py-5">
+                  <div className="flex items-center">
+                    <div className={`w-2 h-2 rounded-full mr-2 ${
+                      finding.scanner === 'gitleaks' ? 'bg-blue-400' : 'bg-green-400'
+                    }`} />
+                    <span className="capitalize font-medium text-neutral-700">{finding.scanner || 'regex'}</span>
+                  </div>
                   {finding.confidence && (
-                    <div className="text-xs text-gray-400">
+                    <div className="text-xs text-neutral-500 mt-1">
                       {Math.round((finding.confidence || 0) * 100)}% confidence
                     </div>
                   )}
@@ -124,48 +160,59 @@ export default function FindingsTable({
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="px-6 py-4 border-t border-gray-200">
+        <motion.div 
+          className="px-8 py-6 border-t border-neutral-100 bg-gradient-to-r from-neutral-50 to-white"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+        >
           <div className="flex items-center justify-between">
-            <div className="text-sm text-gray-700">
+            <div className="text-sm text-neutral-700 font-medium">
               Page {page} of {totalPages}
             </div>
             
             <div className="flex items-center space-x-2">
-              <button
+              <motion.button
                 onClick={() => onPageChange(page - 1)}
                 disabled={page <= 1}
-                className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="p-3 rounded-xl border border-neutral-200 hover:bg-white hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
               >
                 <ChevronLeft className="w-4 h-4" />
-              </button>
+              </motion.button>
               
               {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                 const pageNum = Math.max(1, Math.min(totalPages - 4, page - 2)) + i;
                 return (
-                  <button
+                  <motion.button
                     key={pageNum}
                     onClick={() => onPageChange(pageNum)}
-                    className={`px-3 py-2 rounded-lg text-sm ${
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className={`px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 ${
                       pageNum === page
-                        ? 'bg-blue-600 text-white'
-                        : 'border border-gray-300 hover:bg-gray-50'
+                        ? 'bg-gradient-to-r from-primary-500 to-secondary-500 text-white shadow-lg'
+                        : 'border border-neutral-200 hover:bg-white hover:shadow-md text-neutral-700'
                     }`}
                   >
                     {pageNum}
-                  </button>
+                  </motion.button>
                 );
               })}
               
-              <button
+              <motion.button
                 onClick={() => onPageChange(page + 1)}
                 disabled={page >= totalPages}
-                className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="p-3 rounded-xl border border-neutral-200 hover:bg-white hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
               >
                 <ChevronRight className="w-4 h-4" />
-              </button>
+              </motion.button>
             </div>
           </div>
-        </div>
+        </motion.div>
       )}
     </div>
   );

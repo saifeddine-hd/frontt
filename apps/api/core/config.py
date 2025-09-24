@@ -1,10 +1,14 @@
 import os
 from typing import Optional
+from dotenv import load_dotenv
+
+# Charger le .env
+load_dotenv()  # lit automatiquement le fichier .env à la racine
 
 class Settings:
     # App Configuration
-    APP_NAME: str = "SecretHawk API"
-    VERSION: str = "1.0.0"
+    APP_NAME: str = os.getenv("APP_NAME", "SecretHawk API")
+    VERSION: str = os.getenv("VERSION", "1.0.0")
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
     
     # Database
@@ -12,16 +16,16 @@ class Settings:
     
     # Security
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
-    JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRATION_HOURS: int = 1
+    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
+    JWT_EXPIRATION_HOURS: int = int(os.getenv("JWT_EXPIRATION_HOURS", 1))
     
     # File Upload
-    MAX_UPLOAD_SIZE: int = 50 * 1024 * 1024  # 50MB
-    UPLOAD_DIR: str = "/tmp/secrethawk"
+    MAX_UPLOAD_SIZE: int = int(os.getenv("MAX_UPLOAD_SIZE", 50 * 1024 * 1024))
+    UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "/tmp/secrethawk")
     
     # Scanning
-    SCAN_TIMEOUT: int = 300  # 5 minutes
-    MAX_CONCURRENT_SCANS: int = 5
+    SCAN_TIMEOUT: int = int(os.getenv("SCAN_TIMEOUT", 300))
+    MAX_CONCURRENT_SCANS: int = int(os.getenv("MAX_CONCURRENT_SCANS", 5))
     
     # Redis (for production)
     REDIS_URL: Optional[str] = os.getenv("REDIS_URL")

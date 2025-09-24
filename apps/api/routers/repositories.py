@@ -17,41 +17,25 @@ async def create_repository(
     background_tasks: BackgroundTasks,
     token: dict = Depends(verify_token)
 ) -> Dict[str, Any]:
-    """Add a new repository to monitor"""
     
-    # Create repository object
     repository = Repository(
         id=str(uuid.uuid4()),
         url=repo_data.url,
         provider=repo_data.provider,
         name=repo_data.name,
-        token=repo_data.token,  # Will be encrypted in storage
+        token=repo_data.token,
         discord_webhook_url=repo_data.discord_webhook_url,
-        webhook_secret=str(uuid.uuid4()),  # Generate webhook secret
+        webhook_secret=str(uuid.uuid4()),
         created_at=datetime.utcnow()
     )
     
-    # Test repository access
     if not await git_provider_service.test_repository_access(repository):
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot access repository with provided token"
-        )
+        raise HTTPException(status_code=400, detail="Cannot access repository with provided token")
     
-    # Save repository
     saved_repo = await repository_repository.create(repository)
     
-    # Setup webhook in background
-    background_tasks.add_task(
-        git_provider_service.setup_webhook,
-        saved_repo
-    )
-    
-    # Start initial scan in background
-    background_tasks.add_task(
-        repository_scanner.scan_repository,
-        saved_repo.id
-    )
+    background_tasks.add_task(git_provider_service.setup_webhook, saved_repo)
+    background_tasks.add_task(repository_scanner.scan_repository, saved_repo.id)
     
     return {
         "id": saved_repo.id,
@@ -61,11 +45,7 @@ async def create_repository(
     }
 
 @router.get("/")
-async def list_repositories(
-    token: dict = Depends(verify_token)
-) -> List[Dict[str, Any]]:
-    """List all monitored repositories"""
-    
+async def list_repositories(token: dict = Depends(verify_token)) -> List[Dict[str, Any]]:
     repositories = await repository_repository.get_all()
     
     return [
@@ -82,13 +62,25 @@ async def list_repositories(
         for repo in repositories
     ]
 
-@router.get("/{repository_id}")
-async def get_repository(
-    repository_id: str,
-    token: dict = Depends(verify_token)
-) -> Dict[str, Any]:
-    """Get repository details"""
+@router.get("/recent")
+async def get_recent_repository_scans(limit: int = 10, token: dict = Depends(verify_token)):
+    repositories = await repository_repository.get_recent_scans(limit=limit)
     
+    return [
+        {
+            "id": repo.id,
+            "filename": repo.name,
+            "status": repo.last_scan_status or "pending",
+            "created_at": repo.last_scan.isoformat() if repo.last_scan else repo.created_at.isoformat(),
+            "completed_at": repo.last_scan_completed.isoformat() if hasattr(repo, "last_scan_completed") and repo.last_scan_completed else None,
+            "findings_count": repo.findings_count or 0,
+            "error": repo.last_scan_error if hasattr(repo, "last_scan_error") else None
+        }
+        for repo in repositories
+    ]
+
+@router.get("/{repository_id}")
+async def get_repository(repository_id: str, token: dict = Depends(verify_token)) -> Dict[str, Any]:
     repo = await repository_repository.get_by_id(repository_id)
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
@@ -108,18 +100,11 @@ async def get_repository(
     }
 
 @router.put("/{repository_id}")
-async def update_repository(
-    repository_id: str,
-    repo_update: RepositoryUpdate,
-    token: dict = Depends(verify_token)
-) -> Dict[str, Any]:
-    """Update repository configuration"""
-    
+async def update_repository(repository_id: str, repo_update: RepositoryUpdate, token: dict = Depends(verify_token)):
     repo = await repository_repository.get_by_id(repository_id)
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
     
-    # Update repository
     updated_repo = await repository_repository.update(repository_id, repo_update)
     
     return {
@@ -128,12 +113,7 @@ async def update_repository(
     }
 
 @router.delete("/{repository_id}")
-async def delete_repository(
-    repository_id: str,
-    token: dict = Depends(verify_token)
-) -> Dict[str, Any]:
-    """Delete a monitored repository"""
-    
+async def delete_repository(repository_id: str, token: dict = Depends(verify_token)):
     repo = await repository_repository.get_by_id(repository_id)
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
@@ -143,22 +123,12 @@ async def delete_repository(
     return {"message": "Repository deleted successfully"}
 
 @router.post("/{repository_id}/scan")
-async def trigger_manual_scan(
-    repository_id: str,
-    background_tasks: BackgroundTasks,
-    token: dict = Depends(verify_token)
-) -> Dict[str, Any]:
-    """Manually trigger a repository scan"""
-    
+async def trigger_manual_scan(repository_id: str, background_tasks: BackgroundTasks, token: dict = Depends(verify_token)):
     repo = await repository_repository.get_by_id(repository_id)
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
     
-    # Start scan in background
-    background_tasks.add_task(
-        repository_scanner.scan_repository,
-        repository_id
-    )
+    background_tasks.add_task(repository_scanner.scan_repository, repository_id)
     
     return {
         "message": f"Manual scan triggered for {repo.name}",
@@ -166,12 +136,7 @@ async def trigger_manual_scan(
     }
 
 @router.post("/{repository_id}/test-webhook")
-async def test_discord_webhook(
-    repository_id: str,
-    token: dict = Depends(verify_token)
-) -> Dict[str, Any]:
-    """Test Discord webhook configuration"""
-    
+async def test_discord_webhook(repository_id: str, token: dict = Depends(verify_token)):
     repo = await repository_repository.get_by_id(repository_id)
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found")
@@ -179,16 +144,9 @@ async def test_discord_webhook(
     if not repo.discord_webhook_url:
         raise HTTPException(status_code=400, detail="No Discord webhook URL configured")
     
-    # Send test notification
     from services.discord_notifier import discord_notifier
-    
     success = await discord_notifier.send_scan_summary(
-        str(repo.discord_webhook_url),
-        repo,
-        0,  # No findings for test
-        0,
-        0,
-        "test-scan"
+        str(repo.discord_webhook_url), repo, 0, 0, 0, "test-scan"
     )
     
     if success:

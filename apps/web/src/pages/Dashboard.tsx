@@ -1,11 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Shield, AlertTriangle, Clock, CheckCircle, Upload, FileSearch } from 'lucide-react';
+import {
+  Plus,
+  Shield,
+  AlertTriangle,
+  CheckCircle,
+  Upload,
+  FileSearch,
+  Zap,
+  TrendingUp,
+  Activity
+} from 'lucide-react';
 
 import StatCard from '../components/StatCard';
 import RecentScansTable from '../components/RecentScansTable';
-import { getRecentScans } from '../lib/api';
 import type { ScanJob } from '../types';
 
 export default function Dashboard() {
@@ -20,62 +29,43 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
+    const loadDashboardData = async () => {
+      try {
+        // 🔹 Fetch recent scans depuis ton API
+        const res = await fetch('/api/scans/recent');
+        if (!res.ok) throw new Error('Failed to fetch recent scans');
+        const data: ScanJob[] = await res.json();
+
+        setRecentScans(data);
+
+        // 🔹 Calcul des stats
+        const totalScans = data.length;
+        const criticalFindings = data.reduce(
+          (sum, scan) => sum + (scan.findings_count ?? 0),
+          0
+        );
+        const pendingScans = data.filter(
+          (s) => s.status === 'pending' || s.status === 'running'
+        ).length;
+        const completedScans = data.filter((s) => s.status === 'completed').length;
+
+        setStats({
+          totalScans,
+          criticalFindings,
+          pendingScans,
+          completedScans
+        });
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     loadDashboardData();
   }, []);
 
-  const loadDashboardData = async () => {
-    try {
-      // Mock data for now - in real implementation, fetch from API
-      const mockScans: ScanJob[] = [
-        {
-          id: '1',
-          filename: 'frontend-app.zip',
-          status: 'completed',
-          created_at: new Date('2024-01-15T10:30:00'),
-          completed_at: new Date('2024-01-15T10:32:15'),
-          findings_count: 3
-        },
-        {
-          id: '2',
-          filename: 'backend-api.zip',
-          status: 'running',
-          created_at: new Date('2024-01-15T11:00:00'),
-          findings_count: null
-        },
-        {
-          id: '3',
-          filename: 'mobile-app.zip',
-          status: 'completed',
-          created_at: new Date('2024-01-14T15:20:00'),
-          completed_at: new Date('2024-01-14T15:23:45'),
-          findings_count: 0
-        }
-      ];
-
-      setRecentScans(mockScans);
-      
-      // Calculate stats
-      const totalScans = mockScans.length;
-      const criticalFindings = mockScans.reduce((sum, scan) => sum + (scan.findings_count || 0), 0);
-      const pendingScans = mockScans.filter(scan => scan.status === 'pending' || scan.status === 'running').length;
-      const completedScans = mockScans.filter(scan => scan.status === 'completed').length;
-
-      setStats({
-        totalScans,
-        criticalFindings,
-        pendingScans,
-        completedScans
-      });
-    } catch (error) {
-      console.error('Failed to load dashboard data:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleStartScan = () => {
-    navigate('/scan');
-  };
+  const handleStartScan = () => navigate('/scan');
 
   if (isLoading) {
     return (
@@ -95,21 +85,40 @@ export default function Dashboard() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between"
+        transition={{ duration: 0.6, ease: 'easeOut' }}
+        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
       >
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600 mt-2">Monitor your secret scanning activities</p>
+        <div className="space-y-2">
+          <motion.h1
+            className="text-4xl font-bold text-gradient-primary"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.2, duration: 0.6 }}
+          >
+            Dashboard
+          </motion.h1>
+          <motion.p
+            className="text-neutral-600 text-lg"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.3, duration: 0.6 }}
+          >
+            Monitor your secret scanning activities with real-time insights
+          </motion.p>
         </div>
-        
+
         <motion.button
           onClick={handleStartScan}
-          whileHover={{ scale: 1.05 }}
+          whileHover={{ scale: 1.05, y: -2 }}
           whileTap={{ scale: 0.95 }}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold flex items-center space-x-2 transition-colors"
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.4, duration: 0.6, type: 'spring', bounce: 0.3 }}
+          className="btn btn-primary btn-lg group shadow-xl hover:shadow-2xl"
         >
-          <Plus className="w-5 h-5" />
+          <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
           <span>New Scan</span>
+          <Zap className="w-4 h-4 ml-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         </motion.button>
       </motion.div>
 
@@ -117,38 +126,35 @@ export default function Dashboard() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
+        transition={{ delay: 0.5, duration: 0.6 }}
         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
       >
         <StatCard
           title="Total Scans"
           value={stats.totalScans}
-          icon={<FileSearch className="w-6 h-6" />}
+          icon={<FileSearch />}
           color="blue"
-          trend={+12}
+          trend={12}
         />
-        
         <StatCard
           title="Critical Findings"
           value={stats.criticalFindings}
-          icon={<AlertTriangle className="w-6 h-6" />}
+          icon={<AlertTriangle />}
           color="red"
           trend={-5}
         />
-        
         <StatCard
           title="Running Scans"
           value={stats.pendingScans}
-          icon={<Clock className="w-6 h-6" />}
+          icon={<Activity />}
           color="yellow"
         />
-        
         <StatCard
           title="Completed"
           value={stats.completedScans}
-          icon={<CheckCircle className="w-6 h-6" />}
+          icon={<CheckCircle />}
           color="green"
-          trend={+8}
+          trend={8}
         />
       </motion.div>
 
@@ -156,44 +162,76 @@ export default function Dashboard() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
-        className="bg-white rounded-lg shadow-sm p-6"
+        transition={{ delay: 0.6, duration: 0.6 }}
+        className="card p-8"
       >
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Quick Actions</h2>
-        
+        <motion.h2
+          className="text-2xl font-bold text-neutral-900 mb-6 flex items-center"
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.7 }}
+        >
+          <Zap className="w-6 h-6 text-primary-500 mr-2" />
+          Quick Actions
+        </motion.h2>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <motion.button
             onClick={handleStartScan}
-            whileHover={{ scale: 1.02 }}
-            className="p-6 border border-gray-200 rounded-lg hover:border-blue-300 hover:shadow-md transition-all text-left"
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.8 }}
+            className="p-6 card hover:shadow-xl transition-all duration-300 text-left group border-2 border-transparent hover:border-primary-200"
           >
-            <div className="flex items-center mb-3">
-              <Upload className="w-8 h-8 text-blue-600 mr-3" />
-              <h3 className="font-semibold text-gray-900">Upload & Scan</h3>
+            <div className="flex items-center mb-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center mr-4 group-hover:scale-110 transition-transform duration-300">
+                <Upload className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="font-bold text-neutral-900 text-lg">Upload & Scan</h3>
             </div>
-            <p className="text-gray-600 text-sm">Upload a ZIP file and start scanning for secrets</p>
+            <p className="text-neutral-600">
+              Upload a ZIP file and start scanning for secrets with our advanced detection engine
+            </p>
           </motion.button>
 
           <motion.button
-            whileHover={{ scale: 1.02 }}
-            className="p-6 border border-gray-200 rounded-lg hover:border-green-300 hover:shadow-md transition-all text-left"
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.9 }}
+            className="p-6 card hover:shadow-xl transition-all duration-300 text-left group border-2 border-transparent hover:border-green-200"
           >
-            <div className="flex items-center mb-3">
-              <Shield className="w-8 h-8 text-green-600 mr-3" />
-              <h3 className="font-semibold text-gray-900">Security Report</h3>
+            <div className="flex items-center mb-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl flex items-center justify-center mr-4 group-hover:scale-110 transition-transform duration-300">
+                <Shield className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="font-bold text-neutral-900 text-lg">Security Report</h3>
             </div>
-            <p className="text-gray-600 text-sm">View comprehensive security analysis</p>
+            <p className="text-neutral-600">
+              View comprehensive security analysis and detailed vulnerability reports
+            </p>
           </motion.button>
 
           <motion.button
-            whileHover={{ scale: 1.02 }}
-            className="p-6 border border-gray-200 rounded-lg hover:border-purple-300 hover:shadow-md transition-all text-left"
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.0 }}
+            className="p-6 card hover:shadow-xl transition-all duration-300 text-left group border-2 border-transparent hover:border-purple-200"
           >
-            <div className="flex items-center mb-3">
-              <FileSearch className="w-8 h-8 text-purple-600 mr-3" />
-              <h3 className="font-semibold text-gray-900">Browse Findings</h3>
+            <div className="flex items-center mb-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-violet-500 rounded-xl flex items-center justify-center mr-4 group-hover:scale-110 transition-transform duration-300">
+                <FileSearch className="w-6 h-6 text-white" />
+              </div>
+              <h3 className="font-bold text-neutral-900 text-lg">Browse Findings</h3>
             </div>
-            <p className="text-gray-600 text-sm">Explore detailed scan results and findings</p>
+            <p className="text-neutral-600">
+              Explore detailed scan results and findings with advanced filtering options
+            </p>
           </motion.button>
         </div>
       </motion.div>
@@ -202,13 +240,21 @@ export default function Dashboard() {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="bg-white rounded-lg shadow-sm"
+        transition={{ delay: 0.7, duration: 0.6 }}
+        className="card-elevated"
       >
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Recent Scans</h2>
+        <div className="px-8 py-6 border-b border-neutral-100">
+          <motion.h2
+            className="text-2xl font-bold text-neutral-900 flex items-center"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.8 }}
+          >
+            <TrendingUp className="w-6 h-6 text-primary-500 mr-2" />
+            Recent Scans
+          </motion.h2>
         </div>
-        
+
         <RecentScansTable scans={recentScans} />
       </motion.div>
     </div>

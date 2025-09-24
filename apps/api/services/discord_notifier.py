@@ -11,6 +11,7 @@ class DiscordNotifier:
     """Service to send Discord notifications for security findings"""
     
     def __init__(self):
+        
         self.session = None
     
     async def get_session(self):

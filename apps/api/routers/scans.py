@@ -5,12 +5,16 @@ import os
 import zipfile
 import tempfile
 from datetime import datetime
+import os
 
 from services.runner import ScanRunner
 from models.scan import ScanJob, ScanStatus
 from storage.repositories import scan_repository
 
 router = APIRouter(tags=["Scans"], prefix="/scans")
+
+# Configurable max file size (200 MB)
+MAX_FILE_SIZE = int(os.getenv("MAX_SCAN_FILE_SIZE", 200 * 1024 * 1024))
 
 @router.post("/")
 async def create_scan(
@@ -19,12 +23,16 @@ async def create_scan(
 ) -> Dict[str, Any]:
     """Create a new scan job"""
     
-    # Validate file
+    # Validate file type
     if not file.filename or not file.filename.endswith('.zip'):
         raise HTTPException(status_code=400, detail="Only ZIP files are supported")
     
-    if file.size and file.size > 50 * 1024 * 1024:  # 50MB limit
-        raise HTTPException(status_code=400, detail="File too large (max 50MB)")
+    # Validate file size
+    if file.size and file.size > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"File too large (max {MAX_FILE_SIZE // (1024*1024)}MB)"
+        )
     
     # Create scan job
     job_id = str(uuid.uuid4())
@@ -34,7 +42,6 @@ async def create_scan(
         status=ScanStatus.PENDING,
         created_at=datetime.utcnow()
     )
-    
     await scan_repository.create(scan_job)
     
     # Save uploaded file temporarily
@@ -72,43 +79,55 @@ async def get_scan_status(job_id: str) -> Dict[str, Any]:
         "error": scan_job.error
     }
 
+@router.get("/recent")
+async def get_recent_scans(limit: int = 10):
+    """Return recent scans (file + repository) for dashboard"""
+    recent_file_scans = await scan_repository.get_recent(limit=limit)
+    
+    from storage.repositories import repository_repository
+    recent_repo_scans = await repository_repository.get_recent_scans(limit=limit)
+    
+    combined_scans = recent_file_scans + recent_repo_scans
+    combined_scans.sort(key=lambda x: x.created_at if hasattr(x, "created_at") else x.last_scan, reverse=True)
+    combined_scans = combined_scans[:limit]
+    
+    return [
+        {
+            "id": s.id,
+            "filename": getattr(s, "filename", getattr(s, "repository_name", "Repository Scan")),
+            "status": getattr(s, "status", getattr(s, "last_scan_status", "pending")).value
+            if hasattr(getattr(s, "status", None), "value") else getattr(s, "status", "pending"),
+            "created_at": (s.created_at if hasattr(s, "created_at") else s.last_scan).isoformat(),
+            "completed_at": getattr(s, "completed_at", getattr(s, "last_scan_completed", None)).isoformat() 
+                            if getattr(s, "completed_at", getattr(s, "last_scan_completed", None)) else None,
+            "findings_count": getattr(s, "findings_count", 0) or 0,
+            "error": getattr(s, "error", getattr(s, "last_scan_error", None))
+        }
+        for s in combined_scans
+    ]
+
 async def run_scan_job(job_id: str, file_path: str):
     """Background task to run the scan"""
     try:
-        # Update status to running
         await scan_repository.update_status(job_id, ScanStatus.RUNNING)
         
-        # Extract ZIP file
         extract_dir = tempfile.mkdtemp()
         with zipfile.ZipFile(file_path, 'r') as zip_ref:
             zip_ref.extractall(extract_dir)
         
-        # Run the scan
         runner = ScanRunner()
         findings = await runner.scan_directory(extract_dir)
         
-        # Save findings to database
         from storage.repositories import finding_repository
         for finding in findings:
             finding.job_id = job_id
             await finding_repository.create(finding)
         
-        # Update job status
-        await scan_repository.update_completion(
-            job_id, 
-            ScanStatus.COMPLETED, 
-            len(findings)
-        )
+        await scan_repository.update_completion(job_id, ScanStatus.COMPLETED, len(findings))
         
     except Exception as e:
-        # Update job with error
-        await scan_repository.update_status(
-            job_id, 
-            ScanStatus.FAILED, 
-            str(e)
-        )
+        await scan_repository.update_status(job_id, ScanStatus.FAILED, str(e))
     finally:
-        # Cleanup temporary files
         import shutil
         try:
             if os.path.exists(file_path):
@@ -116,4 +135,4 @@ async def run_scan_job(job_id: str, file_path: str):
             if 'extract_dir' in locals() and os.path.exists(extract_dir):
                 shutil.rmtree(extract_dir)
         except Exception:
-            pass  # Ignore cleanup errors
+            pass

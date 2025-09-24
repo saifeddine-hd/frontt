@@ -6,6 +6,8 @@ import { toast } from 'sonner';
 
 import { createScan } from '../lib/api';
 
+const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB
+
 export default function ScanUpload() {
   const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
@@ -26,10 +28,10 @@ export default function ScanUpload() {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
-    
+
     const droppedFiles = Array.from(e.dataTransfer.files);
     const zipFile = droppedFiles.find(file => file.name.endsWith('.zip'));
-    
+
     if (zipFile) {
       setFile(zipFile);
     } else {
@@ -58,8 +60,8 @@ export default function ScanUpload() {
       return;
     }
 
-    if (file.size > 50 * 1024 * 1024) { // 50MB limit
-      toast.error('File size must be less than 50MB');
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error(`File size must be less than ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
       return;
     }
 
@@ -79,7 +81,7 @@ export default function ScanUpload() {
 
     try {
       const response = await createScan(file);
-      
+
       setUploadProgress(100);
       setTimeout(() => {
         toast.success('Scan started successfully!');
@@ -105,10 +107,7 @@ export default function ScanUpload() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <h1 className="text-3xl font-bold text-gray-900">Upload & Scan</h1>
         <p className="text-gray-600 mt-2">Upload your codebase to scan for exposed secrets</p>
       </motion.div>
@@ -129,28 +128,17 @@ export default function ScanUpload() {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
             className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
-              isDragOver
-                ? 'border-blue-400 bg-blue-50'
-                : file
-                ? 'border-green-400 bg-green-50'
-                : 'border-gray-300 hover:border-gray-400'
+              isDragOver ? 'border-blue-400 bg-blue-50' : file ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:border-gray-400'
             }`}
           >
             {file ? (
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="space-y-4"
-              >
+              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="space-y-4">
                 <CheckCircle className="w-12 h-12 text-green-500 mx-auto" />
                 <div className="space-y-2">
                   <p className="text-lg font-medium text-gray-900">{file.name}</p>
                   <p className="text-gray-500">{formatFileSize(file.size)}</p>
                 </div>
-                <button
-                  onClick={removeFile}
-                  className="text-red-500 hover:text-red-700 font-medium flex items-center mx-auto"
-                >
+                <button onClick={removeFile} className="text-red-500 hover:text-red-700 font-medium flex items-center mx-auto">
                   <X className="w-4 h-4 mr-1" />
                   Remove file
                 </button>
@@ -159,23 +147,15 @@ export default function ScanUpload() {
               <div className="space-y-4">
                 <Upload className={`w-12 h-12 mx-auto ${isDragOver ? 'text-blue-500' : 'text-gray-400'}`} />
                 <div className="space-y-2">
-                  <p className="text-lg font-medium text-gray-900">
-                    {isDragOver ? 'Drop your file here' : 'Drag and drop your ZIP file here'}
-                  </p>
+                  <p className="text-lg font-medium text-gray-900">{isDragOver ? 'Drop your file here' : 'Drag and drop your ZIP file here'}</p>
                   <p className="text-gray-500">or</p>
                   <label className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg cursor-pointer transition-colors">
                     Browse Files
-                    <input
-                      type="file"
-                      accept=".zip"
-                      onChange={handleFileSelect}
-                      className="hidden"
-                      disabled={isUploading}
-                    />
+                    <input type="file" accept=".zip" onChange={handleFileSelect} className="hidden" disabled={isUploading} />
                   </label>
                 </div>
                 <p className="text-sm text-gray-500">
-                  Maximum file size: 50MB. Only ZIP files are supported.
+                  Maximum file size: {MAX_FILE_SIZE / (1024 * 1024)}MB. Only ZIP files are supported.
                 </p>
               </div>
             )}
@@ -183,11 +163,7 @@ export default function ScanUpload() {
 
           {/* Upload Progress */}
           {isUploading && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              className="mt-6"
-            >
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-6">
               <div className="bg-gray-200 rounded-full h-3 overflow-hidden">
                 <motion.div
                   className="bg-blue-600 h-full rounded-full"
@@ -196,23 +172,14 @@ export default function ScanUpload() {
                   transition={{ duration: 0.3 }}
                 />
               </div>
-              <p className="text-center text-sm text-gray-600 mt-2">
-                Uploading... {uploadProgress}%
-              </p>
+              <p className="text-center text-sm text-gray-600 mt-2">Uploading... {uploadProgress}%</p>
             </motion.div>
           )}
 
           {/* Upload Button */}
           {file && !isUploading && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="mt-6 flex justify-center"
-            >
-              <button
-                onClick={handleUpload}
-                className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
-              >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-6 flex justify-center">
+              <button onClick={handleUpload} className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 rounded-lg font-semibold transition-colors">
                 Start Scan
               </button>
             </motion.div>
@@ -220,12 +187,7 @@ export default function ScanUpload() {
         </motion.div>
 
         {/* Info Cards */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8"
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
             <div className="flex items-start">
               <FileType className="w-6 h-6 text-blue-600 mt-1 mr-3 flex-shrink-0" />

@@ -5,8 +5,7 @@ import uvicorn
 import os
 from contextlib import asynccontextmanager
 
-from routers import health, scans, findings
-from routers import repositories, webhooks
+from routers import health, scans, findings, repositories, webhooks
 from core.config import settings
 from core.security import verify_token
 from storage.db import init_db
@@ -18,10 +17,18 @@ security = HTTPBearer()
 async def lifespan(app: FastAPI):
     # Startup
     await init_db()
-    scheduler_service.start()
+    
+    # Start scheduler only if not already running
+    if not getattr(scheduler_service, "running", False):
+        scheduler_service.start()
+        scheduler_service.running = True
+
     yield
+
     # Shutdown
-    scheduler_service.stop()
+    if getattr(scheduler_service, "running", False):
+        scheduler_service.stop()
+        scheduler_service.running = False
 
 app = FastAPI(
     title="SecretHawk API",
@@ -31,9 +38,14 @@ app = FastAPI(
 )
 
 # CORS configuration
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://*.vercel.app"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -60,5 +72,5 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=int(os.getenv("PORT", 8000)),
-        reload=True if os.getenv("ENVIRONMENT") == "development" else False
+        reload=False  # IMPORTANT: désactive reload pour éviter les threads doublés
     )
