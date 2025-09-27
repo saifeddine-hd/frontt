@@ -12,6 +12,7 @@ from models.scan import ScanJob, ScanStatus
 from models.finding import Finding
 from services.git_provider import git_provider_service
 from services.discord_notifier import discord_notifier
+from services.runner import ScanRunner  # Import du scanner complet
 from storage.repositories import repository_repository, scan_repository, finding_repository
 
 
@@ -21,8 +22,9 @@ class RepositoryScanner:
     def __init__(self):
         # Détection du binaire Gitleaks
         self.gitleaks_path = shutil.which("gitleaks") or r"D:\gitleaks\gitleaks.exe"
-        if not os.path.isfile(self.gitleaks_path):
-            raise FileNotFoundError(f"Gitleaks executable not found at {self.gitleaks_path}")
+        # Note: On n'exige plus que Gitleaks soit présent car on a le scanner regex
+        self.scanner = ScanRunner()  # Utilise le même scanner que pour les ZIP
+        print(f"Repository scanner initialized. Gitleaks path: {self.gitleaks_path}")
 
     async def scan_repository(self, repository_id: str) -> Optional[str]:
         """Scan a repository and send notifications"""
@@ -46,7 +48,7 @@ class RepositoryScanner:
             scan_job = ScanJob(
                 id=str(uuid.uuid4()),
                 filename=f"{repo.name}-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}",
-                status="running",
+                status=ScanStatus.RUNNING,  # Use proper enum
                 created_at=datetime.utcnow()
             )
             await scan_repository.create(scan_job)
@@ -58,9 +60,9 @@ class RepositoryScanner:
                 temp_dir = await git_provider_service.clone_repository(repo)
                 print(f"✅ Repository cloned to: {temp_dir}")
 
-                # Run Gitleaks scan
-                print(f"🔍 Running security scan with Gitleaks...")
-                findings = await self._run_gitleaks_scan(temp_dir)
+                # Run COMPLETE scan (Gitleaks + Regex patterns)
+                print(f"🔍 Running complete security scan...")
+                findings = await self.scanner.scan_directory(temp_dir)
                 print(f"📊 Scan found {len(findings)} potential issues")
 
                 # Save findings
@@ -71,32 +73,38 @@ class RepositoryScanner:
                 # Update scan job
                 await scan_repository.update_completion(
                     scan_job.id,
-                    "completed",
+                    ScanStatus.COMPLETED,
                     len(findings)
                 )
 
-                # Update repository
+                # Update repository with current timestamp
+                current_time = datetime.utcnow()
                 await repository_repository.update_scan_status(
                     repository_id,
                     "completed",
-                    datetime.utcnow(),
+                    current_time,
                     len(findings)
                 )
 
                 # Send Discord notifications
                 await self._send_notifications(repo, findings, scan_job.id)
 
-                print(f"✅ Scan completed for {repo.name}: {len(findings)} findings")
+                print(f"✅ Scan completed for {repo.name}: {len(findings)} findings at {current_time}")
                 return scan_job.id
 
             finally:
                 # Cleanup temporary directory
-                if temp_dir:
-                    shutil.rmtree(temp_dir, ignore_errors=True)
+                if temp_dir and os.path.exists(temp_dir):
+                    try:
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+                        print(f"🧹 Cleaned up temporary directory: {temp_dir}")
+                    except Exception as cleanup_error:
+                        print(f"Warning: Could not clean up temp directory: {cleanup_error}")
 
         except Exception as e:
             import traceback
-            print(f"❌ Error scanning repository {repository_id}: {e}")
+            error_msg = f"Error scanning repository {repository_id}: {str(e)}"
+            print(f"❌ {error_msg}")
             print(f"Full traceback: {traceback.format_exc()}")
 
             # Update repository status to error
@@ -107,6 +115,10 @@ class RepositoryScanner:
                     datetime.utcnow(),
                     error=str(e)
                 )
+                
+                # Update scan job to failed
+                if 'scan_job' in locals():
+                    await scan_repository.update_status(scan_job.id, ScanStatus.FAILED, str(e))
             except Exception as update_error:
                 print(f"Additional error updating repository status: {update_error}")
 
@@ -117,6 +129,7 @@ class RepositoryScanner:
         try:
             repo = await repository_repository.get_by_id(repository_id)
             if not repo:
+                print(f"Repository {repository_id} not found for webhook")
                 return None
 
             print(f"🔗 Webhook triggered scan for {repo.name}")
@@ -128,8 +141,9 @@ class RepositoryScanner:
                 print(f"📝 Processing {len(commits)} commits")
                 # For now, scan the entire repository
                 return await self.scan_repository(repository_id)
-
-            return None
+            else:
+                print("No commits found in webhook payload")
+                return None
 
         except Exception as e:
             print(f"Error processing webhook for repository {repository_id}: {e}")
@@ -144,9 +158,15 @@ class RepositoryScanner:
                 print("No Discord webhook URL configured for this repository")
                 return
 
+            # Count findings by severity
             critical_count = len([f for f in findings if f.severity == "critical"])
             high_count = len([f for f in findings if f.severity == "high"])
+            medium_count = len([f for f in findings if f.severity == "medium"])
+            low_count = len([f for f in findings if f.severity == "low"])
 
+            print(f"📊 Notification summary: {critical_count} critical, {high_count} high, {medium_count} medium, {low_count} low")
+
+            # Send summary notification
             await discord_notifier.send_scan_summary(
                 str(webhook_url),
                 repo,
@@ -156,6 +176,7 @@ class RepositoryScanner:
                 scan_id
             )
 
+            # Send detailed alert for critical and high severity issues
             if critical_count > 0 or high_count > 0:
                 critical_and_high = [f for f in findings if f.severity in ["critical", "high"]]
                 await discord_notifier.send_security_alert(
@@ -164,6 +185,7 @@ class RepositoryScanner:
                     critical_and_high,
                     scan_id
                 )
+                print(f"🚨 Sent security alert for {len(critical_and_high)} critical/high findings")
 
         except Exception as e:
             print(f"Error sending notifications: {e}")
@@ -173,8 +195,19 @@ class RepositoryScanner:
         commits = []
 
         try:
-            if provider in ["github", "gitlab"]:
+            if provider == "github":
                 commits = webhook_data.get("commits", [])
+                if commits:
+                    print(f"GitHub webhook: Found {len(commits)} commits")
+                    for commit in commits[:3]:  # Log first 3 commits
+                        print(f"  - {commit.get('id', 'unknown')[:8]}: {commit.get('message', 'no message')[:50]}")
+            
+            elif provider == "gitlab":
+                commits = webhook_data.get("commits", [])
+                if commits:
+                    print(f"GitLab webhook: Found {len(commits)} commits")
+                    for commit in commits[:3]:  # Log first 3 commits
+                        print(f"  - {commit.get('id', 'unknown')[:8]}: {commit.get('message', 'no message')[:50]}")
 
             return commits
 
@@ -183,35 +216,18 @@ class RepositoryScanner:
             return []
 
     async def _run_gitleaks_scan(self, repo_path: str) -> List[Finding]:
-        """Run Gitleaks scan on the cloned repository"""
-        findings = []
+        """Legacy method - kept for compatibility but not used anymore"""
+        print("Warning: _run_gitleaks_scan is deprecated. Use ScanRunner.scan_directory instead.")
+        return []
 
-        try:
-            cmd = [
-                self.gitleaks_path,
-                "detect",
-                "--source", repo_path,
-                "--report-format", "json"
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-
-            if result.stdout:
-                leaks = json.loads(result.stdout)
-                for leak in leaks:
-                    finding = Finding(
-                        id=str(uuid.uuid4()),
-                        filename=leak.get("file", ""),
-                        line=leak.get("line", 0),
-                        secret=leak.get("secret", "")[:50],  # truncate for safety
-                        rule=leak.get("rule", ""),
-                        severity="high" if leak.get("rule", "").lower() in ["apikey", "password"] else "medium"
-                    )
-                    findings.append(finding)
-
-        except Exception as e:
-            print(f"Error running Gitleaks scan: {e}")
-
-        return findings
+    def get_scan_status(self) -> dict:
+        """Get scanner status information"""
+        return {
+            "gitleaks_available": os.path.isfile(self.gitleaks_path) if self.gitleaks_path else False,
+            "gitleaks_path": self.gitleaks_path,
+            "scanner_initialized": self.scanner is not None,
+            "timestamp": datetime.utcnow().isoformat()
+        }
 
 
 # Singleton instance

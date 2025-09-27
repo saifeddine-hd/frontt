@@ -1,8 +1,5 @@
-# Allowlist configuration for SecretHawk
-# Patterns and rules that should be ignored during scanning
-
+# Files to ignore
 files:
-  # Test files and fixtures
   - ".*test.*"
   - ".*fixture.*"
   - ".*mock.*"
@@ -12,22 +9,24 @@ files:
   - ".*/vendor/.*"
   - ".*/dist/.*"
   - ".*/build/.*"
-  
+  - ".*/package-lock.json"
+  - ".*/yarn.lock"
+
+# Patterns to ignore
 secrets:
-  # Example/placeholder secrets
   - "^(example|test|demo|placeholder|fake|dummy)"
-  - "^[x]{10,}$"  # All x's
-  - "^[*]{10,}$"  # All asterisks
-  - "^[0]{10,}$"  # All zeros
+  - "^[x]{10,}$"
+  - "^[*]{10,}$"
+  - "^[0]{10,}$"
   - "^(your|my|our)[-_]?(secret|key|token|password)"
-  
+
+# Disable rules for specific contexts
 rules:
-  # Rules to disable for specific contexts
   - "test_rule"
   - "example_pattern"
 
+# Comments allowed to contain example secrets
 comments:
-  # Allow secrets in comments that are clearly examples
   - "# Example:"
   - "// Example:"
   - "<!-- Example"

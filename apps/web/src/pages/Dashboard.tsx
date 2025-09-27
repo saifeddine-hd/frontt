@@ -31,14 +31,13 @@ export default function Dashboard() {
   useEffect(() => {
     const loadDashboardData = async () => {
       try {
-        // 🔹 Fetch recent scans depuis ton API
-        const res = await fetch('/api/scans/recent');
-        if (!res.ok) throw new Error('Failed to fetch recent scans');
-        const data: ScanJob[] = await res.json();
+        // Import the API function
+        const { getRecentScans } = await import('../lib/api');
+        const data: ScanJob[] = await getRecentScans();
 
         setRecentScans(data);
 
-        // 🔹 Calcul des stats
+        // Calculate stats
         const totalScans = data.length;
         const criticalFindings = data.reduce(
           (sum, scan) => sum + (scan.findings_count ?? 0),

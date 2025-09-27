@@ -5,7 +5,7 @@ import os
 import zipfile
 import tempfile
 from datetime import datetime
-import os
+import shutil
 
 from services.runner import ScanRunner
 from models.scan import ScanJob, ScanStatus
@@ -69,9 +69,12 @@ async def get_scan_status(job_id: str) -> Dict[str, Any]:
     if not scan_job:
         raise HTTPException(status_code=404, detail="Scan job not found")
     
+    # Fix: Handle both enum and string status
+    status = scan_job.status.value if hasattr(scan_job.status, 'value') else str(scan_job.status)
+    
     return {
         "job_id": job_id,
-        "status": scan_job.status.value,
+        "status": status,
         "filename": scan_job.filename,
         "created_at": scan_job.created_at.isoformat(),
         "completed_at": scan_job.completed_at.isoformat() if scan_job.completed_at else None,
@@ -96,7 +99,7 @@ async def get_recent_scans(limit: int = 10):
             "id": s.id,
             "filename": getattr(s, "filename", getattr(s, "repository_name", "Repository Scan")),
             "status": getattr(s, "status", getattr(s, "last_scan_status", "pending")).value
-            if hasattr(getattr(s, "status", None), "value") else getattr(s, "status", "pending"),
+            if hasattr(getattr(s, "status", None), "value") else str(getattr(s, "status", "pending")),
             "created_at": (s.created_at if hasattr(s, "created_at") else s.last_scan).isoformat(),
             "completed_at": getattr(s, "completed_at", getattr(s, "last_scan_completed", None)).isoformat() 
                             if getattr(s, "completed_at", getattr(s, "last_scan_completed", None)) else None,
@@ -108,31 +111,69 @@ async def get_recent_scans(limit: int = 10):
 
 async def run_scan_job(job_id: str, file_path: str):
     """Background task to run the scan"""
+    extract_dir = None
     try:
         await scan_repository.update_status(job_id, ScanStatus.RUNNING)
         
         extract_dir = tempfile.mkdtemp()
-        with zipfile.ZipFile(file_path, 'r') as zip_ref:
-            zip_ref.extractall(extract_dir)
         
+        # Extract ZIP file with filtering to exclude unnecessary directories
+        with zipfile.ZipFile(file_path, 'r') as zip_ref:
+            # Filter out node_modules, .git, __pycache__, and other common directories
+            excluded_patterns = [
+                'node_modules/',
+                '__pycache__/',
+                '.git/',
+                '.vscode/',
+                '.idea/',
+                'venv/',
+                'env/',
+                '.env/',
+                'build/',
+                'dist/',
+                'target/',
+                '.DS_Store'
+            ]
+            
+            members_to_extract = []
+            for member in zip_ref.infolist():
+                # Skip if any excluded pattern is in the file path
+                if not any(pattern in member.filename for pattern in excluded_patterns):
+                    members_to_extract.append(member)
+            
+            # Extract only filtered members
+            for member in members_to_extract:
+                try:
+                    zip_ref.extract(member, extract_dir)
+                except Exception as e:
+                    print(f"Warning: Could not extract {member.filename}: {e}")
+                    continue
+        
+        # Run the scan
         runner = ScanRunner()
         findings = await runner.scan_directory(extract_dir)
         
+        # Save findings to database
         from storage.repositories import finding_repository
         for finding in findings:
             finding.job_id = job_id
             await finding_repository.create(finding)
         
+        # Update scan completion status
         await scan_repository.update_completion(job_id, ScanStatus.COMPLETED, len(findings))
         
+    except zipfile.BadZipFile:
+        await scan_repository.update_status(job_id, ScanStatus.FAILED, "Invalid ZIP file")
     except Exception as e:
-        await scan_repository.update_status(job_id, ScanStatus.FAILED, str(e))
+        error_msg = f"Scan failed: {str(e)}"
+        await scan_repository.update_status(job_id, ScanStatus.FAILED, error_msg)
+        print(f"Error in scan job {job_id}: {error_msg}")
     finally:
-        import shutil
+        # Clean up temporary files
         try:
             if os.path.exists(file_path):
                 os.remove(file_path)
-            if 'extract_dir' in locals() and os.path.exists(extract_dir):
+            if extract_dir and os.path.exists(extract_dir):
                 shutil.rmtree(extract_dir)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Warning: Could not clean up temporary files: {e}")
