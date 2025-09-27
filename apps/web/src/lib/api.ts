@@ -94,6 +94,19 @@ class ApiClient {
   async getScanStatistics(jobId: string) {
     return this.request(`/findings/stats/${jobId}`);
   }
+
+  // Dashboard
+  async getDashboardStats() {
+    return this.request('/dashboard/stats');
+  }
+
+  async getRecentScans(limit: number = 10) {
+    return this.request(`/dashboard/recent-scans?limit=${limit}`);
+  }
+
+  async getDashboardOverview() {
+    return this.request('/dashboard/overview');
+  }
 }
 
 const apiClient = new ApiClient();
@@ -122,6 +135,13 @@ export const exportFindings = (jobId: string, format: 'json' | 'csv') =>
 export const getScanStatistics = (jobId: string) => 
   apiClient.getScanStatistics(jobId);
 
+// Dashboard
+export const getDashboardStats = () => apiClient.getDashboardStats();
+
+export const getRecentScans = (limit?: number) => apiClient.getRecentScans(limit);
+
+export const getDashboardOverview = () => apiClient.getDashboardOverview();
+
 // Repositories
 export const getRepositories = () => apiClient.request('/repositories');
 
@@ -141,9 +161,3 @@ export const triggerScan = (id: string) => apiClient.request(`/repositories/${id
 export const testWebhook = (id: string) => apiClient.request(`/repositories/${id}/test-webhook`, {
   method: 'POST'
 });
-
-// Mock function for recent scans (replace with real API call)
-export const getRecentScans = async () => {
-  // This would be replaced with a real API call
-  return [];
-};

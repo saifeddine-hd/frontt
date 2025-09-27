@@ -6,6 +6,7 @@ import os
 from contextlib import asynccontextmanager
 
 from routers import health, scans, findings, repositories, webhooks
+from routers import dashboard
 from core.config import settings
 from core.security import verify_token
 from storage.db import init_db
@@ -41,6 +42,8 @@ app = FastAPI(
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 
 app.add_middleware(
@@ -53,6 +56,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(health.router, prefix="/api/v1")
+app.include_router(dashboard.router, prefix="/api/v1", dependencies=[Depends(verify_token)])
 app.include_router(scans.router, prefix="/api/v1", dependencies=[Depends(verify_token)])
 app.include_router(findings.router, prefix="/api/v1", dependencies=[Depends(verify_token)])
 app.include_router(repositories.router, prefix="/api/v1", dependencies=[Depends(verify_token)])

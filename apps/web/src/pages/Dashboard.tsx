@@ -15,6 +15,7 @@ import {
 
 import StatCard from '../components/StatCard';
 import RecentScansTable from '../components/RecentScansTable';
+import { getDashboardStats, getRecentScans } from '../lib/api';
 import type { ScanJob } from '../types';
 
 export default function Dashboard() {
@@ -31,29 +32,35 @@ export default function Dashboard() {
   useEffect(() => {
     const loadDashboardData = async () => {
       try {
-        // Import the API function
-        const { getRecentScans } = await import('../lib/api');
-        const data: ScanJob[] = await getRecentScans();
+        // Load dashboard stats and recent scans
+        const [statsResponse, scansResponse] = await Promise.all([
+          getDashboardStats(),
+          getRecentScans(10)
+        ]);
 
-        setRecentScans(data);
+        // Update stats
+        if (statsResponse.success) {
+          setStats({
+            totalScans: statsResponse.data.total_scans,
+            criticalFindings: statsResponse.data.critical_findings,
+            pendingScans: statsResponse.data.running_scans,
+            completedScans: statsResponse.data.completed_scans
+          });
+        }
 
-        // Calculate stats
-        const totalScans = data.length;
-        const criticalFindings = data.reduce(
-          (sum, scan) => sum + (scan.findings_count ?? 0),
-          0
-        );
-        const pendingScans = data.filter(
-          (s) => s.status === 'pending' || s.status === 'running'
-        ).length;
-        const completedScans = data.filter((s) => s.status === 'completed').length;
-
-        setStats({
-          totalScans,
-          criticalFindings,
-          pendingScans,
-          completedScans
-        });
+        // Update recent scans
+        if (scansResponse.success) {
+          const formattedScans = scansResponse.data.map((scan: any) => ({
+            id: scan.id,
+            filename: scan.filename,
+            status: scan.status,
+            created_at: scan.created_at,
+            completed_at: scan.completed_at,
+            findings_count: scan.findings_count,
+            error: scan.error
+          }));
+          setRecentScans(formattedScans);
+        }
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
       } finally {

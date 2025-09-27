@@ -64,6 +64,47 @@ class ScanRepository:
         """, (status, datetime.utcnow().isoformat(), findings_count, scan_id))
         await db.commit()
 
+    async def count_by_status(self, status: str) -> int:
+        """Count scans by status"""
+        db = await get_db_connection()
+        cursor = await db.execute("SELECT COUNT(*) FROM scans WHERE status = ?", (status,))
+        result = await cursor.fetchone()
+        return result[0] if result else 0
+
+    async def count_completed_since(self, since_date: datetime) -> int:
+        """Count completed scans since a specific date"""
+        db = await get_db_connection()
+        cursor = await db.execute("""
+            SELECT COUNT(*) FROM scans 
+            WHERE status = 'completed' AND completed_at >= ?
+        """, (since_date.isoformat(),))
+        result = await cursor.fetchone()
+        return result[0] if result else 0
+
+    async def get_recent(self, limit: int = 10) -> List[ScanJob]:
+        """Get recent scans"""
+        db = await get_db_connection()
+        cursor = await db.execute("""
+            SELECT id, filename, status, created_at, completed_at, findings_count, error
+            FROM scans 
+            ORDER BY created_at DESC 
+            LIMIT ?
+        """, (limit,))
+        rows = await cursor.fetchall()
+        
+        scans = []
+        for row in rows:
+            scans.append(ScanJob(
+                id=row[0],
+                filename=row[1],
+                status=ScanStatus(row[2]),
+                created_at=datetime.fromisoformat(row[3]),
+                completed_at=datetime.fromisoformat(row[4]) if row[4] else None,
+                findings_count=row[5],
+                error=row[6]
+            ))
+        return scans
+
 
 # -------------------------------
 # Finding Repository
@@ -175,6 +216,31 @@ class FindingRepository:
 
         return stats
 
+    async def count_by_severity(self, severity: str) -> int:
+        """Count findings by severity across all scans"""
+        db = await get_db_connection()
+        cursor = await db.execute("SELECT COUNT(*) FROM findings WHERE severity = ?", (severity,))
+        result = await cursor.fetchone()
+        return result[0] if result else 0
+
+    async def get_severity_stats_for_scan(self, scan_id: str) -> Dict[str, int]:
+        """Get severity statistics for a specific scan"""
+        db = await get_db_connection()
+        cursor = await db.execute("""
+            SELECT severity, COUNT(*) as count 
+            FROM findings 
+            WHERE job_id = ? 
+            GROUP BY severity
+        """, (scan_id,))
+        rows = await cursor.fetchall()
+        
+        stats = {"total": 0, "critical": 0, "high": 0, "medium": 0, "low": 0}
+        for severity, count in rows:
+            stats[severity] = count
+            stats["total"] += count
+        
+        return stats
+
 
 # -------------------------------
 # Repository Repository
@@ -267,6 +333,33 @@ class RepositoryRepository:
                 id=row[0], url=row[1], provider=row[2], name=row[3], token=decrypted_token,
                 status=RepositoryStatus(row[5]) if isinstance(row[5], str) else row[5], 
                 webhook_secret=row[6],
+                discord_webhook_url=row[7] if row[7] else None,
+                last_scan=datetime.fromisoformat(row[8]) if row[8] else None,
+                last_scan_status=row[9], findings_count=row[10],
+                created_at=datetime.fromisoformat(row[11]) if row[11] else None,
+                updated_at=datetime.fromisoformat(row[12]) if row[12] else None
+            ))
+        return repositories
+
+    async def get_recent_scans(self, limit: int = 10) -> List[Repository]:
+        """Get repositories with recent scans"""
+        repositories = []
+        db = await get_db_connection()
+        cursor = await db.execute("""
+            SELECT id, url, provider, name, token, status, webhook_secret,
+                   discord_webhook_url, last_scan, last_scan_status, findings_count,
+                   created_at, updated_at
+            FROM repositories 
+            WHERE last_scan IS NOT NULL
+            ORDER BY last_scan DESC 
+            LIMIT ?
+        """, (limit,))
+        rows = await cursor.fetchall()
+        for row in rows:
+            decrypted_token = decrypt_token(row[4])
+            repositories.append(Repository(
+                id=row[0], url=row[1], provider=row[2], name=row[3], token=decrypted_token,
+                status=row[5], webhook_secret=row[6],
                 discord_webhook_url=row[7] if row[7] else None,
                 last_scan=datetime.fromisoformat(row[8]) if row[8] else None,
                 last_scan_status=row[9], findings_count=row[10],
